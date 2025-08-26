@@ -1,0 +1,188 @@
+name: Auto Review and Merge PR
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main, master]
+
+jobs:
+  auto-review:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run type check
+        run: bun run typecheck
+
+      - name: Run linting
+        run: bun run lint
+
+      - name: Run tests
+        run: bun test
+
+      - name: Build package
+        run: bun run build
+
+      - name: Check if PR only adds error types
+        id: check-changes
+        run: |
+          # 检查是否只修改了允许的文件
+          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }} HEAD)
+          echo "Changed files: $CHANGED_FILES"
+          
+          ALLOWED_CHANGES=true
+          for file in $CHANGED_FILES; do
+            case $file in
+              src/index.ts|test/index.test.ts|USAGE.md|README.md)
+                echo "✅ Allowed file: $file"
+                ;;
+              *)
+                echo "❌ Unauthorized file change: $file"
+                ALLOWED_CHANGES=false
+                ;;
+            esac
+          done
+          
+          echo "allowed_changes=$ALLOWED_CHANGES" >> $GITHUB_OUTPUT
+
+      - name: Check error type additions
+        id: check-error-types
+        if: steps.check-changes.outputs.allowed_changes == 'true'
+        run: |
+          # 检查是否添加了新的错误类型而不是修改现有的
+          git diff origin/${{ github.base_ref }} HEAD src/index.ts > changes.diff
+          
+          # 检查是否只是添加新的枚举值或错误创建器
+          if grep -q "^-.*Error" changes.diff; then
+            echo "❌ Detected removal or modification of existing error types"
+            echo "error_types_ok=false" >> $GITHUB_OUTPUT
+          else
+            echo "✅ Only additions detected"
+            echo "error_types_ok=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Auto approve PR
+        if: |
+          steps.check-changes.outputs.allowed_changes == 'true' && 
+          steps.check-error-types.outputs.error_types_ok == 'true'
+        uses: juliangruber/approve-pull-request-action@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          number: ${{ github.event.pull_request.number }}
+
+      - name: Auto merge PR
+        if: |
+          steps.check-changes.outputs.allowed_changes == 'true' && 
+          steps.check-error-types.outputs.error_types_ok == 'true'
+        uses: pascalgn/merge-pull-request-action@v0.15.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          merge_method: squash
+
+      - name: Comment on rejection
+        if: |
+          steps.check-changes.outputs.allowed_changes == 'false' || 
+          steps.check-error-types.outputs.error_types_ok == 'false'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## ❌ 自动审核失败
+              
+              您的PR未通过自动审核。请确保：
+              
+              1. ✅ 只修改允许的文件：
+                 - \`src/index.ts\` - 添加新的错误类型和创建器
+                 - \`test/index.test.ts\` - 添加相应的测试
+                 - \`USAGE.md\` 或 \`README.md\` - 更新文档
+              
+              2. ✅ 只添加新的错误类型，不修改或删除现有的错误类型
+              
+              3. ✅ 所有测试必须通过
+              
+              4. ✅ 代码必须通过类型检查和语法检查
+              
+              请修改您的PR后重新提交。如有疑问，请在Issue中讨论。`
+            })
+
+  # 发布新版本（仅在合并到主分支后）
+  release:
+    needs: auto-review
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build package
+        run: bun run build
+
+      - name: Bump version
+        run: |
+          # 自动增加补丁版本号
+          current_version=$(node -p "require('./package.json').version")
+          new_version=$(echo $current_version | awk -F. '{$NF = $NF + 1;} 1' | sed 's/ /./g')
+          echo "Bumping version from $current_version to $new_version"
+          
+          # 更新package.json
+          sed -i "s/\"version\": \"$current_version\"/\"version\": \"$new_version\"/" package.json
+          
+          # 提交版本更新
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add package.json
+          git commit -m "chore: bump version to $new_version"
+          git push
+
+      - name: Create Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.bump.outputs.new_version }}
+          release_name: Release v${{ steps.bump.outputs.new_version }}
+          body: |
+            🎉 自动发布新版本！
+            
+            本版本包含了社区贡献的新错误类型。
+            
+            ## 变更内容
+            ${{ github.event.pull_request.title }}
+            
+            感谢 @${{ github.event.pull_request.user.login }} 的贡献！
+          draft: false
+          prerelease: false
+
+      - name: Publish to npm
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
+          npm publish --access public
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

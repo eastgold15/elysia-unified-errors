@@ -1,61 +1,51 @@
-import { Elysia } from "elysia";
-
 /**
- * Example Elysia plugin configuration options
+ * Elysia 统一错误处理库 - 模块化版本
+ * 提供简洁直观的错误类和统一的错误处理
  */
-export interface ExamplePluginOptions {
-  /** 插件前缀 */
-  prefix?: string;
-  /** 是否启用日志 */
-  enableLogging?: boolean;
-  /** 自定义消息 */
-  message?: string;
-}
 
-/**
- * Example Elysia plugin that adds a greeting endpoint
- */
-export const examplePlugin = (options: ExamplePluginOptions = {}) => {
-  const {
-    prefix = "/example",
-    enableLogging = true,
-    message = "Hello from Elysia plugin!"
-  } = options;
+// 基础类型和基类
+export { BaseError, HttpStatusCode } from "./types/base";
 
-  return new Elysia({ name: "example-plugin" })
-    .decorate("exampleMessage", message)
-    .derive(() => ({
-      timestamp: new Date().toISOString()
-    }))
-    .onBeforeHandle(() => {
-      if (enableLogging) {
-        console.log(`[ExamplePlugin] Processing request at ${new Date().toISOString()}`);
-      }
-    })
-    .group(prefix, (app: any) =>
-      app
-        .get("/", ({ exampleMessage, timestamp }: any) => ({
-          message: exampleMessage,
-          timestamp,
-          plugin: "example-plugin"
-        }))
-        .get("/health", () => ({
-          status: "ok",
-          plugin: "example-plugin",
-          timestamp: new Date().toISOString()
-        }))
-        .post("/echo", ({ body }: any) => ({
-          echo: body,
-          timestamp: new Date().toISOString()
-        }))
-    );
-};
+// 认证相关错误
+export {
+  InvalidTokenError,
+  ExpiredTokenError,
+  MissingTokenError,
+  InvalidCredentialsError,
+  UserNotFoundError,
+} from "./errors/auth";
 
-/**
- * 默认导出插件
- */
-export default examplePlugin;
+// 业务相关错误
+export {
+  ResourceNotFoundError,
+  PermissionDeniedError,
+  OperationFailedError,
+  ResourceConflictError,
+  QuotaExceededError,
+  RateLimitExceededError,
+  ValidationError,
+} from "./errors/business";
 
-/**
- * 导出类型定义
- */
+// 系统相关错误
+export {
+  InternalError,
+  NetworkError,
+  TimeoutError,
+  ServiceUnavailableError,
+  ConfigurationError,
+} from "./errors/system";
+
+// 自定义错误
+export {
+  CustomError,
+  PaymentFailedError,
+  InsufficientFundsError,
+  ProductOutOfStockError,
+  InvalidCouponError,
+  FileNotFoundError,
+  FileTooLargeError,
+  createCustomError,
+} from "./errors/custom";
+
+// 工具函数
+export { formatErrorResponse, handleError } from "./utils";
