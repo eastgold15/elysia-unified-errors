@@ -1,6 +1,6 @@
 {
 	"name": "@pori15/elysia-unified-errors",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "统一的错误处理库，为 Elysia 项目提供标准化的错误定义和处理",
 	"author": "pori",
 	"license": "MIT",
@@ -40,7 +40,7 @@
 		"test:node:esm": "node -e \"import('./dist/index.mjs').then(m => console.log('ESM test:', m))\"",
 		"test:watch": "bun test --watch",
 		"prepublishOnly": "bun run build && bun run test",
-		"release": "npm run build && npm run test && npm publish --access public",
+		"release": "npm run build && npm run test && changeset publish",
 		"format": "prettier --write .",
 		"lint": "eslint src test example --ext .ts",
 		"typecheck": "tsc --noEmit"
@@ -50,13 +50,12 @@
 	},
 	"devDependencies": {
 		"@types/bun": "latest",
-		"elysia": "latest",
-		"pkgroll": "^2.15.3",
-		"typescript": "^5.0.0",
-		"prettier": "^3.0.0",
 		"@typescript-eslint/eslint-plugin": "^7.0.0",
 		"@typescript-eslint/parser": "^7.0.0",
-		"eslint": "^8.0.0"
+		"@changesets/cli": "^2.29.5",
+		"elysia": "latest",
+		"pkgroll": "^2.15.3",
+		"typescript": "^5.5.0"
 	},
 	"repository": {
 		"type": "git",
@@ -65,5 +64,8 @@
 	"homepage": "https://github.com/eastgold15/elysia-package-example#readme",
 	"bugs": {
 		"url": "https://github.com/eastgold15/elysia-package-example/issues"
+	},
+	"dependencies": {
+		"@pori15/config": "^0.0.4"
 	}
 }

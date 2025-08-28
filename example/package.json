@@ -1,0 +1,11 @@
+{
+	"name": "example",
+	"version": "1.0.0",
+	"description": "统一的错误处理库，为 Elysia 项目提供标准化的错误定义和处理",
+	"author": "pori",
+	"license": "MIT",
+	"type": "module",
+	"devDependencies": {
+		"@pori15/config": "latest"
+	}
+}
